@@ -61,23 +61,23 @@ sub pop {
 # FE; INS; ALU;
 
 # LDM (R->M)
-# 00001RRRBBBBBBBB
+# 00001 RRRBBBBBBBB
 # OPR; MBO; MBI; RI; RO;
 # MA; MI;
 
 # LDI (I->M)
-# 00010000BBBBBBBB
+# 00010 000BBBBBBBB
 # IIIIIIIIIIIIIIII
 # OPR; MBO; MBI; MA;
 # FE; ALU; MI;
 
 # STM (M->R)
-# 00011RRRBBBBBBBB
+# 00111 RRRBBBBBBBB
 # OPR; MBO; MBI; RI; RO;
 # MA; MO;
 
 # STIR (I->R)
-# 00011RRR00000000
+# 00011 RRR00000000
 # OPR; RI; SR;
 # FE; ALU; MI;
 
@@ -89,12 +89,20 @@ sub pop {
 # SEVS (F)
 # SES (F)
 
+# CLA (A)
+# 00000 00000000001
+# OPR;
+
+# CLS (S)
+# 00000 00000000010
+# OPR;
+
 # ADD (R)
-# 00100RRR00000000
+# 00100 RRR00000000
 # OPR; RI; AAR;
 
 # SUB (R)
-# 00100RRR00000001
+# 00100 RRR00000001
 # OPR; RI; ASR;
 
 # MULR (R,R)
@@ -113,6 +121,7 @@ sub pop {
 
 my $pc   = 0x1000;
 my $ir   = 0; # instruction register
+my $r15  = 0; # internal scratch register (for OPR)
 my $bus  = 0;
 my $bank = 0;
 my $mar  = 0;
@@ -125,20 +134,18 @@ sub FE {
 
 sub MA {
 	$mar = $mem[0][7];
-	#print "MAR = $mar\n";
 }
 
 sub AAR {
-	$mem[0][$bus] = $mem[0][8];
+	$mem[0][$bus] = $mem[0][$bus] + $mem[0][8];
 }
 
 sub ASR {
-	$mem[0][$bus] = $mem[0][9];
+	$mem[0][$bus] = $mem[0][$bus] + $mem[0][9];
 }
 
 sub SR {
 	$mar = $bus;
-	#print "MAR = $mar\n";
 }
 
 sub SO {
@@ -146,8 +153,7 @@ sub SO {
 }
 
 sub MBO {
-	$bus = ($bus << 3) % 0x7fff;
-	$bus = $bus >> 3;
+	$bus = ($opr & 0b00011111111);
 }
 
 sub MBI {
@@ -155,7 +161,7 @@ sub MBI {
 }
 
 sub RI {
-	$bus = $bus >> 8;
+	$bus = ($opr & 0b11100000000)>>8;
 }
 
 sub RO {
@@ -163,8 +169,12 @@ sub RO {
 }
 
 sub MI {
-	$mem[$bank][$mar] = $bus;
-	#print "MEMIN[$mar] = $bus\n";
+	if ($ir == 3) {
+		$mem[0][$mar] = $bus;
+	} else {
+		$mem[$bank][$mar] = $bus;
+	}
+	
 }
 
 sub MO {
@@ -176,18 +186,13 @@ sub INS {
 }
 
 sub OPR {
-	$bus = ($bus << 5) % 0xffff;
-	$bus = $bus >> 5;
-	#printf "OPR = %b\n", $bus;
-}
-
-sub IMM {
-	$bus = $mem[0][$pc];
-	#print "IMM = $bus\n";
+	$opr = ($bus & 0x07ff);
+	print "OPR = $opr\n";
 }
 
 sub ALU {
 	my $s = $mem[0][10] & 2;
+	$mem[0][8] = 0; $mem[0][9] = 0;
 	$mem[0][8] = $mem[0][8] + $mem[0][0];
 	$mem[0][9] = $mem[0][9] - $mem[0][0];
 	if ($s == 0) {	
@@ -217,34 +222,52 @@ sub ALU {
 	if ($mem[0][9] == 0) {
 		$mem[0][10] = $mem[0][10] | 0x0004;
 	}
+	print "A   = $mem[0][8]\n";
+	print "B   = $mem[0][9]\n";
 }
 
-$mem[0][0x1000] = 0b0001111100000000; # STIR 7
-$mem[0][0x1001] = 0b0001000000010000; # 0x1010
-$mem[0][0x1002] = 0b0001000000000000; # LDI 0
+$mem[0][0x1000] = 0b0001111100000000; # STIR R7
+$mem[0][0x1001] = 0b0011000000010000; # 0x3010
+$mem[0][0x1002] = 0b0001000000000000; # LDI B0
 $mem[0][0x1003] = 0b0001000111100111; # 0x11e7
-$mem[0][0x1004] = 0b0001100000000000; # STIR 0
+$mem[0][0x1004] = 0b0001100000000000; # STIR R0
 $mem[0][0x1005] = 0b0001000000010111; # 0x1017
-$mem[0][0x1006] = 0b0000100000000000; # LDM 0,0
-$mem[0][0x1007] = 0b0000011111111111; # HLT
+$mem[0][0x1006] = 0b0000100000000000; # LDM R0,B0
+$mem[0][0x1007] = 0b0011111000000000; # STM B0,R6
+$mem[0][0x1008] = 0b0000000000000001; # CLA
+$mem[0][0x1009] = 0b0010011000000000; # ADD R6
+$mem[0][0x1010] = 0b0000000000000001; # CLA
+$mem[0][0x1011] = 0b0010011000000001; # SUB R6
+$mem[0][0x1020] = 0b0000011111111111; # HLT
 
 while ($hlt != 1) {
-	FE(); INS(); ALU();
-	print "INS: $bus\n";
+	FE(); INS(); 
+	print "INS: $ir\n";
+	ALU();
 	switch($ir) {
 		case 0	{ 
-			OPR(); 
-			if ($bus == 0x7ff) { 
-				$hlt = 1; 
+			OPR();
+			switch($opr) {
+				case 0x7ff { $hlt = 1;}
+				case 0x1   { $mem[0][8] = 0;}
+				case 0x2   { $mem[0][9] = 0;}
 			}
 		}
-		case 3	{ OPR(); RI(); SR(); FE(); ALU(); MI(); }
-		case 2	{ OPR(); MBO(); MBI(); MA(); FE(); ALU(); MI(); }
+		case 3	{ OPR(); RI(); SR(); FE(); MI(); }
+		case 2	{ OPR(); MBO(); MBI(); MA(); FE(); MI(); }
 		case 1  { OPR(); MBO(); MBI(); RI(); RO(); MA(); MI(); }
+		case 7	{ OPR(); MBO(); MBI(); RI(); MA(); MO(); }
+		case 4  { OPR(); 
+			if (($opr & 0x1) == 0) {
+				RI(); AAR(); 
+			} else {
+				RI(); ASR();
+			}
+		}
 	} 
 }
 
-print "MEM = $mem[0][0x1010]\n";
+print "MEM = $mem[0][0x3010]\n";
 print "R0  = $mem[0][0]\n";
 print "R1  = $mem[0][1]\n";
 print "R2  = $mem[0][2]\n";
