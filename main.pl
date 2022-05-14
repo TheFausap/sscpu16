@@ -69,7 +69,7 @@ sub pop {
 # 00010000BBBBBBBB
 # IIIIIIIIIIIIIIII
 # OPR; MBO; MBI; MA;
-# FE; IMM; ALU; MI;
+# FE; ALU; MI;
 
 # STM (M->R)
 # 00011RRRBBBBBBBB
@@ -79,7 +79,7 @@ sub pop {
 # STIR (I->R)
 # 00011RRR00000000
 # OPR; RI; SR;
-# FE; IMM; ALU; MI;
+# FE; ALU; MI;
 
 # SECA (F) 
 # SECS (F)
@@ -223,18 +223,35 @@ $mem[0][0x1000] = 0b0001111100000000; # STIR 7
 $mem[0][0x1001] = 0b0001000000010000; # 0x1010
 $mem[0][0x1002] = 0b0001000000000000; # LDI 0
 $mem[0][0x1003] = 0b0001000111100111; # 0x11e7
-$mem[0][0x1004] = 0b0000011111111111; # HLT
+$mem[0][0x1004] = 0b0001100000000000; # STIR 0
+$mem[0][0x1005] = 0b0001000000010111; # 0x1017
+$mem[0][0x1006] = 0b0000100000000000; # LDM 0,0
+$mem[0][0x1007] = 0b0000011111111111; # HLT
 
 while ($hlt != 1) {
 	FE(); INS(); ALU();
 	print "INS: $bus\n";
 	switch($ir) {
-		case 0	{ $hlt = 1; }
+		case 0	{ 
+			OPR(); 
+			if ($bus == 0x7ff) { 
+				$hlt = 1; 
+			}
+		}
 		case 3	{ OPR(); RI(); SR(); FE(); ALU(); MI(); }
 		case 2	{ OPR(); MBO(); MBI(); MA(); FE(); ALU(); MI(); }
+		case 1  { OPR(); MBO(); MBI(); RI(); RO(); MA(); MI(); }
 	} 
 }
 
 print "MEM = $mem[0][0x1010]\n";
+print "R0  = $mem[0][0]\n";
+print "R1  = $mem[0][1]\n";
+print "R2  = $mem[0][2]\n";
+print "R3  = $mem[0][3]\n";
+print "R4  = $mem[0][4]\n";
+print "R5  = $mem[0][5]\n";
+print "R6  = $mem[0][6]\n";
+print "R7  = $mem[0][7]\n";
 print "A   = $mem[0][8]\n";
 print "B   = $mem[0][9]\n";
