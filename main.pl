@@ -20,7 +20,7 @@ for ((0..255)) {
 # C = carry, V = overflow, Z = zero, S = signed
 
 sub extrfl {
-	my ($m, $f) = @_;
+	my ($f) = @_;
 	if ($f eq "C") {
 		my $rA = $mem[0][10] & 0x0080;
 		my $rS = $mem[0][10] & 0x0040;
@@ -109,12 +109,32 @@ sub pop {
 # DIVR (R,R)
 
 # JMP (M)
+# 00101 000MMMMMMMM
+# OPR; MBO;
+
 # JCA (M)
+# 00101 001MMMMMMMM
+# OPR; MBO;
+
 # JCS (M)
+# 00101 010MMMMMMMM
+# OPR; MBO;
+
 # JVA (M)
+# 00101 011MMMMMMMM
+# OPR; MBO;
+
 # JVS (M)
+# 00101 100MMMMMMMM
+# OPR; MBO;
+
 # JZA (M)
+# 00101 101MMMMMMMM
+# OPR; MBO;
+
 # JZS (M)
+# 00101 110MMMMMMMM
+# OPR; MBO;
 
 # NOP ()
 # HLT ()
@@ -193,8 +213,9 @@ sub OPR {
 sub ALU {
 	my $s = $mem[0][10] & 2;
 	$mem[0][8] = 0; $mem[0][9] = 0;
-	$mem[0][8] = $mem[0][8] + $mem[0][0];
-	$mem[0][9] = $mem[0][9] - $mem[0][0];
+	my ($fA, $fS) = extrfl("C");
+	$mem[0][8] = $mem[0][8] + $mem[0][0] + $fA;
+	$mem[0][9] = $mem[0][9] - $mem[0][0] + $fS;
 	if ($s == 0) {	
 		if ($mem[0][8] > 65535) {
 			$mem[0][8] = $mem[0][8] % 0xffff;
@@ -226,6 +247,7 @@ sub ALU {
 	print "B   = $mem[0][9]\n";
 }
 
+=begin comment
 $mem[0][0x1000] = 0b0001111100000000; # STIR R7
 $mem[0][0x1001] = 0b0011000000010000; # 0x3010
 $mem[0][0x1002] = 0b0001000000000000; # LDI B0
@@ -238,7 +260,22 @@ $mem[0][0x1008] = 0b0000000000000001; # CLA
 $mem[0][0x1009] = 0b0010011000000000; # ADD R6
 $mem[0][0x1010] = 0b0000000000000001; # CLA
 $mem[0][0x1011] = 0b0010011000000001; # SUB R6
+$mem[0][0x1012] = 0b0010011000000001; # SUB R6
 $mem[0][0x1020] = 0b0000011111111111; # HLT
+=cut
+
+$mem[0][0x1000] = 0b0001100000000000; # STIR R0
+$mem[0][0x1001] = 0b0001000000010111; # 0x1017
+$mem[0][0x1002] = 0b0001100000000000; # STIR R0
+$mem[0][0x1003] = 0b0000000000000010; # 0x2
+$mem[0][0x1004] = 0b0000000000000001; # CLA
+$mem[0][0x1005] = 0b0010011000000000; # ADD R6
+$mem[0][0x1006] = 0b0010011000000000; # ADD R6
+$mem[0][0x1007] = 0b0010011000000000; # ADD R6
+$mem[0][0x1008] = 0b0001100000000000; # STIR R0
+$mem[0][0x1009] = 0b0000000000000001; # 0x1
+$mem[0][0x100a] = 0b0010011000000001; # SUB R6
+$mem[0][0x100b] = 0b0000011111111111; # HLT
 
 while ($hlt != 1) {
 	FE(); INS(); 
@@ -262,6 +299,36 @@ while ($hlt != 1) {
 				RI(); AAR(); 
 			} else {
 				RI(); ASR();
+			}
+		}
+		case 5 { OPR(); MBO();
+			
+			switch($opr & 0x700) {
+				case 0x0	{ $pc = $bus; }
+				case 0x100	{ 
+					my ($fA, $fS) = extrfl("C"); 
+					if ($fA == 1) { $pc = $bus; }
+				}
+				case 0x200	{ 
+					my ($fA, $fS) = extrfl("C"); 
+					if ($fS == 1) { $pc = $bus; }
+				}
+				case 0x300	{ 
+					my ($fA, $fS) = extrfl("V"); 
+					if ($fA == 1) { $pc = $bus; }
+				}
+				case 0x400	{ 
+					my ($fA, $fS) = extrfl("V"); 
+					if ($fS == 1) { $pc = $bus; }
+				}
+				case 0x500	{ 
+					my ($fA, $fS) = extrfl("Z"); 
+					if ($fA == 1) { $pc = $bus; }
+				}
+				case 0x600	{ 
+					my ($fA, $fS) = extrfl("Z"); 
+					if ($fS == 1) { $pc = $bus; }
+				}
 			}
 		}
 	} 
