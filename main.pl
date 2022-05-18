@@ -105,8 +105,12 @@ sub pop {
 # 00100 RRR00000001
 # OPR; RI; ASR;
 
-# MULR (R,R)
-# DIVR (R,R)
+# MULR (R)
+# 00100 RRR00000010
+# OPR; RI; 
+
+# DIVR (R)
+# 00100 RRR00000011
 
 # JMP (M)
 # 00101 000MMMMMMMM
@@ -157,11 +161,25 @@ sub MA {
 }
 
 sub AAR {
-	$mem[0][$bus] = $mem[0][$bus] + $mem[0][8];
+	my ($fA, $fS) = extrfl("C");
+	$mem[0][$bus] = $mem[0][$bus] + $mem[0][8] + $fA;
+	setflg(1,$bus);
 }
 
 sub ASR {
-	$mem[0][$bus] = $mem[0][$bus] + $mem[0][9];
+	my ($fA, $fS) = extrfl("C");
+	$mem[0][$bus] = $mem[0][$bus] + $mem[0][9] + $fS;
+	setflg(1,$bus);
+}
+
+sub AMR {
+	$mem[0][$bus] = $mem[0][$bus] * $mem[0][8];
+	setflg(1,$bus);
+}
+
+sub ADR {
+	$mem[0][$bus] = int($mem[0][$bus] / $mem[0][8]);
+	setflg(1,$bus);
 }
 
 sub SR {
@@ -210,39 +228,74 @@ sub OPR {
 	print "OPR = $opr\n";
 }
 
+sub setflg {
+	my ($aluop, $reg) = @_;
+	my $s = $mem[0][10] & 2;
+
+	if ($aluop == 0) {
+		if ($s == 0) {	
+			if ($mem[0][8] > 65535) {
+				$mem[0][8] = $mem[0][8] % 0xffff;
+				$mem[0][10] = $mem[0][10] | 0x0080;
+				$mem[0][10] = $mem[0][10] | 0x0020;
+			}
+			if ($mem[0][9] < -65535) {
+				$mem[0][9] = ($mem[0][9] % 0xffff);
+				$mem[0][10] = $mem[0][10] | 0x0040;
+				$mem[0][10] = $mem[0][10] | 0x0010;
+			}
+		} else {
+			if ($mem[0][8] > 32767) {
+				$mem[0][8] = $mem[0][8] % 0x7fff;
+				$mem[0][10] = $mem[0][10] | 0x0080;
+			}
+			if ($mem[0][9] < -32768) {
+				$mem[0][9] = ($mem[0][9] % 0x7fff);
+				$mem[0][10] = $mem[0][10] | 0x0040;
+			}
+		}
+		if ($mem[0][8] == 0) {
+			$mem[0][10] = $mem[0][10] | 0x0008;
+		}
+		if ($mem[0][9] == 0) {
+			$mem[0][10] = $mem[0][10] | 0x0004;
+		}
+	} else {
+		if ($s == 0) {	
+			if ($mem[0][$reg] > 65535) {
+				$mem[0][$reg] = $mem[0][$reg] % 0xffff;
+				$mem[0][10] = $mem[0][10] | 0x0080;
+				$mem[0][10] = $mem[0][10] | 0x0020;
+			}
+			if ($mem[0][$reg] < -65535) {
+				$mem[0][$reg] = $mem[0][$reg] % 0xffff;
+				$mem[0][10] = $mem[0][10] | 0x0040;
+				$mem[0][10] = $mem[0][10] | 0x0010;
+			}
+		} else {
+			if ($mem[0][$reg] > 32767) {
+				$mem[0][$reg] = $mem[0][$reg] % 0x7fff;
+				$mem[0][10] = $mem[0][10] | 0x0080;
+			}
+			if ($mem[0][$reg] < -32768) {
+				$mem[0][$reg] = $mem[0][$reg] % 0x7fff;
+				$mem[0][10] = $mem[0][10] | 0x0040;
+			}
+		}
+		if ($mem[0][$reg] == 0) {
+			$mem[0][10] = $mem[0][10] | 0x0008;
+		}
+	}
+	
+	
+}
+
 sub ALU {
 	my $s = $mem[0][10] & 2;
 	$mem[0][8] = 0; $mem[0][9] = 0;
 	my ($fA, $fS) = extrfl("C");
 	$mem[0][8] = $mem[0][8] + $mem[0][0] + $fA;
 	$mem[0][9] = $mem[0][9] - $mem[0][0] + $fS;
-	if ($s == 0) {	
-		if ($mem[0][8] > 65535) {
-			$mem[0][8] = $mem[0][8] % 0xffff;
-			$mem[0][10] = $mem[0][10] | 0x0080;
-			$mem[0][10] = $mem[0][10] | 0x0020;
-		}
-		if ($mem[0][9] < -65535) {
-			$mem[0][9] = ($mem[0][9] % 0xffff);
-			$mem[0][10] = $mem[0][10] | 0x0040;
-			$mem[0][10] = $mem[0][10] | 0x0010;
-		}
-	} else {
-		if ($mem[0][8] > 32767) {
-			$mem[0][8] = $mem[0][8] % 0x7fff;
-			$mem[0][10] = $mem[0][10] | 0x0080;
-		}
-		if ($mem[0][9] < -32768) {
-			$mem[0][9] = ($mem[0][9] % 0x7fff);
-			$mem[0][10] = $mem[0][10] | 0x0040;
-		}
-	}
-	if ($mem[0][8] == 0) {
-		$mem[0][10] = $mem[0][10] | 0x0008;
-	}
-	if ($mem[0][9] == 0) {
-		$mem[0][10] = $mem[0][10] | 0x0004;
-	}
 	print "A   = $mem[0][8]\n";
 	print "B   = $mem[0][9]\n";
 }
@@ -273,7 +326,7 @@ $mem[0][0x1005] = 0b0010011000000000; # ADD R6
 $mem[0][0x1006] = 0b0010011000000000; # ADD R6
 $mem[0][0x1007] = 0b0010011000000000; # ADD R6
 $mem[0][0x1008] = 0b0001100000000000; # STIR R0
-$mem[0][0x1009] = 0b0000000000000001; # 0x1
+$mem[0][0x1009] = 0b0000000000000110; # 0x6
 $mem[0][0x100a] = 0b0010011000000001; # SUB R6
 $mem[0][0x100b] = 0b0000011111111111; # HLT
 
@@ -345,3 +398,4 @@ print "R6  = $mem[0][6]\n";
 print "R7  = $mem[0][7]\n";
 print "A   = $mem[0][8]\n";
 print "B   = $mem[0][9]\n";
+printf "FLAGS = %08b\n", $mem[0][10];
